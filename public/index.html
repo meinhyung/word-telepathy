@@ -143,14 +143,57 @@
   .recent-item {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     background: var(--card);
     border-radius: 12px;
     padding: 10px 14px;
     margin-bottom: 6px;
+    width: 100%;
+    border: none;
+    cursor: pointer;
+    font-family: 'Gowun Dodum', sans-serif;
+    text-align: left;
   }
+  .recent-item:active { transform: scale(0.98); }
   .recent-item .word { font-family: 'Do Hyeon', sans-serif; color: var(--sync); font-size: 16px; }
   .recent-item .meta { color: var(--muted); }
   .recent-empty { color: var(--muted); }
+
+  /* ============ 게임 기보 ============ */
+  #screen-kifu { gap: 4px; }
+  .kifu-title { font-family: 'Do Hyeon', sans-serif; font-size: 24px; margin: 14px 0 4px; }
+  .kifu-sub { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
+  .kifu-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+  .kifu-row {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .kifu-row.matched { border: 2px solid var(--sync); }
+  .kifu-round { font-family: 'Do Hyeon', sans-serif; font-size: 14px; color: var(--muted); width: 32px; flex-shrink: 0; }
+  .kifu-words { display: flex; align-items: center; gap: 8px; flex: 1; flex-wrap: wrap; }
+  .kifu-word-tag {
+    padding: 6px 12px;
+    border-radius: 10px;
+    font-family: 'Do Hyeon', sans-serif;
+    font-size: 15px;
+    color: #fff;
+  }
+  .kifu-word-tag.me { background: var(--me); }
+  .kifu-word-tag.them { background: var(--them); }
+  .kifu-row.matched .kifu-word-tag { background: var(--sync); }
+  .kifu-plus { color: var(--muted); font-size: 13px; }
+  .kifu-badge {
+    font-size: 11px;
+    background: var(--sync);
+    color: #fff;
+    border-radius: 8px;
+    padding: 2px 8px;
+    white-space: nowrap;
+  }
 
   /* ============ 대기/방 화면 ============ */
   #screen-wait, #screen-room { align-items: center; justify-content: center; gap: 18px; text-align: center; }
@@ -317,6 +360,14 @@
     </div>
   </section>
 
+  <!-- ========== 게임 기보 ========== -->
+  <section class="screen" id="screen-kifu">
+    <button class="ghost" id="btn-kifu-back">← 메인으로</button>
+    <h2 class="kifu-title" id="kifu-title"></h2>
+    <p class="kifu-sub" id="kifu-sub"></p>
+    <div class="kifu-list" id="kifu-list"></div>
+  </section>
+
   <!-- ========== 랜덤 매칭 대기 ========== -->
   <section class="screen" id="screen-wait">
     <div class="dots"><span></span><span></span><span></span></div>
@@ -390,7 +441,7 @@
 
   // ---------- 화면 요소 ----------
   const $ = (id) => document.getElementById(id);
-  const screens = ['screen-home', 'screen-wait', 'screen-room', 'screen-game', 'screen-result'];
+  const screens = ['screen-home', 'screen-wait', 'screen-room', 'screen-game', 'screen-result', 'screen-kifu'];
   function showScreen(id) {
     screens.forEach((s) => $(s).classList.toggle('active', s === id));
   }
@@ -398,6 +449,7 @@
   let myNickname = '';
   let currentOpponent = '';
   let timerInterval = null;
+  let currentGameRounds = [];
 
   // ---------- 닉네임 기억하기 ----------
   $('nickname').value = localStorage.getItem('nickname') || '';
@@ -427,15 +479,45 @@
     box.innerHTML = '';
     list.forEach((g) => {
       const d = new Date(g.at);
-      const item = document.createElement('div');
+      const item = document.createElement('button');
+      item.type = 'button';
       item.className = 'recent-item';
       item.innerHTML =
         `<span class="word">${escapeHtml(g.word)}</span>` +
         `<span class="meta">${escapeHtml(g.opponent)}님과 · ${g.rounds}라운드 · ${d.getMonth() + 1}/${d.getDate()}</span>`;
+      item.addEventListener('click', () => showKifu(g));
       box.appendChild(item);
     });
   }
   renderRecent();
+
+  // ---------- 게임 기보 (라운드별로 오간 단어 보기) ----------
+  function showKifu(record) {
+    $('kifu-title').textContent = `${record.opponent}님과의 텔레파시`;
+    $('kifu-sub').textContent = `${record.rounds}라운드 만에 "${record.word}"로 마음이 통했어요`;
+
+    const list = $('kifu-list');
+    list.innerHTML = '';
+    if (!record.roundLog || record.roundLog.length === 0) {
+      list.innerHTML = '<p class="recent-empty">이 게임은 라운드별 기록이 없어요 (업데이트 이전 게임).</p>';
+    } else {
+      record.roundLog.forEach((r) => {
+        const row = document.createElement('div');
+        row.className = 'kifu-row' + (r.matched ? ' matched' : '');
+        row.innerHTML =
+          `<span class="kifu-round">R${r.round}</span>
+          <span class="kifu-words">
+            <span class="kifu-word-tag me">${escapeHtml(r.mine)}</span>
+            <span class="kifu-plus">+</span>
+            <span class="kifu-word-tag them">${escapeHtml(r.theirs)}</span>
+          </span>
+          ${r.matched ? '<span class="kifu-badge">일치!</span>' : ''}`;
+        list.appendChild(row);
+      });
+    }
+    showScreen('screen-kifu');
+  }
+  $('btn-kifu-back').addEventListener('click', goHome);
 
   // ---------- 타이머 바 ----------
   function runTimer(totalMs) {
@@ -501,6 +583,7 @@
 
   // 게임판 초기화 (첫 게임 + "한 번 더" 재시작에서 공통 사용)
   function startNewBoard(message) {
+    currentGameRounds = [];
     $('my-name').textContent = myNickname;
     $('opp-name').textContent = currentOpponent;
     $('history').innerHTML = '';
@@ -565,6 +648,8 @@
     line.innerHTML = `R${round} — <b class="me">${escapeHtml(mine)}</b> / <b class="them">${escapeHtml(theirs)}</b>`;
     $('history').prepend(line);
 
+    currentGameRounds.push({ round, mine, theirs, matched });
+
     if (matched) {
       $('orbs').classList.add('synced');
       $('phase-msg').textContent = '마음이 통했어요!';
@@ -578,7 +663,7 @@
 
   // ---------- 게임 종료 → 결과 + 투표 ----------
   socket.on('game_over', ({ rounds, word, gamesTogether }) => {
-    saveRecentGame({ word, rounds, opponent: currentOpponent, at: Date.now() });
+    saveRecentGame({ word, rounds, opponent: currentOpponent, at: Date.now(), roundLog: currentGameRounds });
     setTimeout(() => {
       $('result-sub').textContent = '두 사람이 도착한 단어';
       $('result-word').textContent = word;
