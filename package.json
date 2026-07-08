@@ -1,17 +1,20 @@
 {
-  "name": "word-sync",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "word-telepathy",
+  "version": "2.0.0",
+  "description": "온라인 랜덤 매칭 단어 텔레파시 게임",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
   "dependencies": {
     "express": "^5.2.1",
-    "socket.io": "^4.8.3",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
     "socket.io-client": "^4.8.3"
   }
 }
