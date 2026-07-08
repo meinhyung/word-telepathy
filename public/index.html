@@ -271,6 +271,11 @@
   .vote-status { font-size: 14px; color: var(--muted); min-height: 20px; }
   .end-box { display: none; flex-direction: column; gap: 10px; margin-top: 16px; min-width: 240px; }
   .end-box.show { display: flex; }
+
+  /* ============ 하단 링크 ============ */
+  .app-footer { text-align: center; padding-top: 18px; }
+  .app-footer a { font-size: 12px; color: var(--muted); text-decoration: none; }
+  .app-footer a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -369,6 +374,10 @@
       <button class="ghost" id="btn-home">메인으로</button>
     </div>
   </section>
+
+  <footer class="app-footer">
+    <a href="/privacy.html">개인정보처리방침</a>
+  </footer>
 
 </div>
 
