@@ -230,7 +230,7 @@
     margin-bottom: 10px;
   }
   .round-label { font-family: 'Do Hyeon', sans-serif; font-size: 26px; }
-  .head-right { display: flex; align-items: baseline; gap: 12px; }
+  .head-right { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .vs-label { font-size: 14px; color: var(--muted); }
   .vs-label b.me { color: var(--me); }
   .vs-label b.them { color: var(--them); }
@@ -242,7 +242,22 @@
     background: transparent;
     color: var(--muted);
     border: 1px solid #D8D2EC;
+    white-space: nowrap;
   }
+
+  .giveup-prompt {
+    display: none;
+    background: var(--card);
+    border: 2px solid var(--sync);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    font-size: 14px;
+    text-align: center;
+  }
+  .giveup-prompt.show { display: block; }
+  .giveup-prompt-actions { display: flex; gap: 10px; margin-top: 10px; }
+  .giveup-prompt-actions button { flex: 1; font-size: 14px; padding: 10px; }
 
   .timer-track {
     height: 8px;
@@ -390,11 +405,20 @@
       <span class="round-label" id="round-label">ROUND 1</span>
       <div class="head-right">
         <span class="vs-label"><b class="me" id="my-name">나</b> · <b class="them" id="opp-name">상대</b></span>
+        <button class="leave-btn" id="btn-giveup">포기 제안</button>
         <button class="leave-btn" id="btn-leave">나가기</button>
       </div>
     </div>
     <div class="timer-track"><div class="timer-fill" id="timer-fill"></div></div>
     <p class="phase-msg" id="phase-msg"></p>
+
+    <div class="giveup-prompt" id="giveup-prompt">
+      <p>상대가 게임을 그만하고 싶어해요.</p>
+      <div class="giveup-prompt-actions">
+        <button class="accent" id="btn-giveup-agree">동의하고 종료</button>
+        <button class="ghost" id="btn-giveup-decline">거절하고 계속</button>
+      </div>
+    </div>
 
     <div class="history" id="history"></div>
 
@@ -444,6 +468,8 @@
   const screens = ['screen-home', 'screen-wait', 'screen-room', 'screen-game', 'screen-result', 'screen-kifu'];
   function showScreen(id) {
     screens.forEach((s) => $(s).classList.toggle('active', s === id));
+    // 게임 기보 화면에서는 구슬 애니메이션이 내용을 가리므로 숨김
+    $('orbs').style.display = (id === 'screen-kifu') ? 'none' : '';
   }
 
   let myNickname = '';
@@ -592,6 +618,9 @@
     $('reveal-area').classList.remove('show');
     $('phase-msg').textContent = message;
     $('timer-fill').style.width = '100%';
+    $('giveup-prompt').classList.remove('show');
+    $('btn-giveup').disabled = false;
+    $('btn-giveup').textContent = '포기 제안';
     showScreen('screen-game');
   }
 
@@ -710,6 +739,40 @@
         $('result-detail').textContent = '상대가 게임을 마쳤어요. 즐거우셨나요?';
       }
     }
+  });
+
+  // ---------- 게임 포기 투표 ----------
+  $('btn-giveup').addEventListener('click', () => {
+    socket.emit('vote_giveup', true);
+    $('btn-giveup').disabled = true;
+    $('btn-giveup').textContent = '제안함 · 응답 대기';
+  });
+  $('btn-giveup-agree').addEventListener('click', () => {
+    socket.emit('vote_giveup', true);
+    $('giveup-prompt').classList.remove('show');
+  });
+  $('btn-giveup-decline').addEventListener('click', () => {
+    socket.emit('vote_giveup', false);
+    $('giveup-prompt').classList.remove('show');
+  });
+  socket.on('opponent_giveup_requested', () => {
+    $('giveup-prompt').classList.add('show');
+  });
+  socket.on('giveup_declined', () => {
+    $('btn-giveup').disabled = false;
+    $('btn-giveup').textContent = '포기 제안';
+    $('giveup-prompt').classList.remove('show');
+    $('phase-msg').textContent = '상대가 포기 제안을 거절했어요. 계속 진행할게요!';
+  });
+  socket.on('game_giveup', () => {
+    clearInterval(timerInterval);
+    $('orbs').classList.remove('synced');
+    $('result-sub').textContent = '';
+    $('result-word').textContent = '게임을 그만뒀어요';
+    $('result-detail').textContent = '둘 다 포기에 동의했어요. 다시 도전해볼까요?';
+    $('vote-box').classList.remove('show');
+    $('end-box').classList.add('show');
+    showScreen('screen-result');
   });
 
   // ---------- 게임 중 나가기 ----------

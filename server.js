@@ -145,7 +145,34 @@ io.on('connection', (socket) => {
       io.to(game.roomId).emit('vote_result', { continue: true, gamesTogether: game.gamesTogether });
       game.round = 0;
       game.phase = 'idle';
+      game.giveupVotes = {};
       game.timer = setTimeout(() => startRound(game), MATCH_DELAY);
+    }
+  });
+
+  // ---------- 게임 포기 투표 (게임이 매치되기 전, 둘 다 동의해야 종료) ----------
+  socket.on('vote_giveup', (agree) => {
+    const game = games.get(socket.data.roomId);
+    if (!game || !['input', 'reveal'].includes(game.phase)) return;
+
+    if (!agree) {
+      // 거절: 진행 중이던 포기 제안을 취소하고 상대에게 알림
+      if (Object.keys(game.giveupVotes).length > 0) {
+        game.giveupVotes = {};
+        socket.to(game.roomId).emit('giveup_declined');
+      }
+      return;
+    }
+
+    if (game.giveupVotes[socket.id]) return; // 이미 제안함
+    game.giveupVotes[socket.id] = true;
+    socket.to(game.roomId).emit('opponent_giveup_requested');
+
+    const [p1, p2] = game.players;
+    if (game.giveupVotes[p1.id] && game.giveupVotes[p2.id]) {
+      clearTimeout(game.timer);
+      io.to(game.roomId).emit('game_giveup');
+      cleanupGame(game);
     }
   });
 
@@ -198,6 +225,7 @@ function startGame(p1, p2) {
     prevWords: {},      // 직전 라운드에 각자 제출했던 단어 (미입력 표기용)
     usedWords: new Set(), // 이 게임에서 이미 나온 단어 (정규화됨, 재사용 금지용)
     votes: {},
+    giveupVotes: {},
     gamesTogether: 1,
     timer: null,
   };
