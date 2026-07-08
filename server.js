@@ -16,7 +16,7 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 시간 설정 (테스트할 때 환경변수로 줄일 수 있음)
-const ROUND_TIME = Number(process.env.ROUND_TIME) || 5000;   // 단어 입력 시간
+const ROUND_TIME = Number(process.env.ROUND_TIME) || 8000;   // 단어 입력 시간
 const REVEAL_TIME = Number(process.env.REVEAL_TIME) || 5000; // 공개 + 생각 시간
 const MATCH_DELAY = Number(process.env.MATCH_DELAY) || 2500; // 매칭/재시작 연출 시간
 const VOTE_TIME = Number(process.env.VOTE_TIME) || 30000;    // "한 번 더" 투표 제한 시간
@@ -28,6 +28,13 @@ const games = new Map();        // roomId -> 게임 상태
 // 단어 비교용 정규화: 앞뒤 공백 제거, 소문자화, 내부 공백 제거
 function normalize(word) {
   return String(word || '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+// 미입력 시 "미입력(전 라운드 단어)" 형식으로 표기. 전 라운드 단어가 없으면 "미입력"만 표기
+function formatWord(word, prevWord) {
+  if (word) return word;
+  if (prevWord) return `미입력(${prevWord})`;
+  return '미입력';
 }
 
 // 헷갈리는 문자(0/O, 1/I)를 뺀 4자리 초대 코드 생성
@@ -98,7 +105,15 @@ io.on('connection', (socket) => {
     if (!game || game.phase !== 'input') return;          // 입력 시간이 아니면 무시
     if (game.words[socket.id] !== undefined) return;      // 중복 제출 방지
 
-    game.words[socket.id] = String(word || '').trim().slice(0, 20);
+    const trimmed = String(word || '').trim().slice(0, 20);
+    const norm = normalize(trimmed);
+    if (norm && game.usedWords.has(norm)) {
+      // 이 게임에서 이미 나왔던 단어면 거절하고 다시 입력하게 함
+      socket.emit('word_rejected', { message: '이미 나온 단어예요. 다른 단어를 입력해주세요.' });
+      return;
+    }
+
+    game.words[socket.id] = trimmed;
     socket.to(game.roomId).emit('opponent_submitted');    // 상대에게 "제출 완료" 알림
 
     // 둘 다 제출했으면 타이머를 기다리지 않고 바로 공개
@@ -180,6 +195,8 @@ function startGame(p1, p2) {
     round: 0,
     phase: 'idle',
     words: {},
+    prevWords: {},      // 직전 라운드에 각자 제출했던 단어 (미입력 표기용)
+    usedWords: new Set(), // 이 게임에서 이미 나온 단어 (정규화됨, 재사용 금지용)
     votes: {},
     gamesTogether: 1,
     timer: null,
@@ -195,6 +212,7 @@ function startGame(p1, p2) {
 // ---------- 라운드 시작 (단어 입력 단계) ----------
 function startRound(game) {
   if (!games.has(game.roomId)) return;
+  game.prevWords = game.words; // 직전 라운드 단어 스냅샷 (미입력 표기용)
   game.round += 1;
   game.phase = 'input';
   game.words = {};
@@ -217,8 +235,18 @@ function endRound(game) {
   // 둘 다 빈 단어가 아니고, 정규화한 결과가 같으면 일치!
   const matched = normalize(w1) !== '' && normalize(w1) === normalize(w2);
 
-  p1.emit('reveal', { mine: w1, theirs: w2, matched, round: game.round, time: REVEAL_TIME });
-  p2.emit('reveal', { mine: w2, theirs: w1, matched, round: game.round, time: REVEAL_TIME });
+  // 미입력이면 전 라운드에 냈던 단어를 괄호 안에 표기
+  const display1 = formatWord(w1, game.prevWords[p1.id]);
+  const display2 = formatWord(w2, game.prevWords[p2.id]);
+
+  p1.emit('reveal', { mine: display1, theirs: display2, matched, round: game.round, time: REVEAL_TIME });
+  p2.emit('reveal', { mine: display2, theirs: display1, matched, round: game.round, time: REVEAL_TIME });
+
+  // 이번 라운드에 나온 단어는 이후 라운드에서 재사용 금지
+  const norm1 = normalize(w1);
+  const norm2 = normalize(w2);
+  if (norm1) game.usedWords.add(norm1);
+  if (norm2) game.usedWords.add(norm2);
 
   if (matched) {
     io.to(game.roomId).emit('game_over', {
